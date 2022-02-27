@@ -74,7 +74,6 @@ int beginServer(void)
         else
         {
           logError("read\n");
-          break;
         }
       }  
     });
@@ -138,7 +137,6 @@ int beginClient(void)
         else
         {
           logError("read\n");
-          break;
         }
       }  
     });

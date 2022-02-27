@@ -485,12 +485,18 @@ int socketRead(ez_socket_t *p_socket, uint8_t *p_data, uint32_t length)
 
     ip_addr_size = sizeof(ip_addr);
     ret = recvfrom(h_socket, (char *)p_data, length, 0, (SOCKADDR*)&ip_addr, &ip_addr_size);
+    if (ret >= 0)
+    {
+      p_socket->remote_ip.port = ntohs(ip_addr.sin_port);
+      strcpy_s(p_socket->remote_ip.ip_addr, inet_ntoa(ip_addr.sin_addr));
+      p_socket->remote_ip.socket_addr = ip_addr;
 
-    p_socket->remote_ip.port = ntohs(ip_addr.sin_port);
-    strcpy_s(p_socket->remote_ip.ip_addr, inet_ntoa(ip_addr.sin_addr));
-    p_socket->remote_ip.socket_addr = ip_addr;
-
-    p_socket->is_remote_ip = true;
+      p_socket->is_remote_ip = true;
+    }
+    else
+    {
+      p_socket->is_remote_ip = false;
+    }
   }
 #else
   ret = read(h_socket, (char *)p_data, length);
