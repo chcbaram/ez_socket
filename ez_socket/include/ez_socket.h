@@ -38,8 +38,25 @@ typedef enum
 {
   EZ_SOCKET_SERVER,
   EZ_SOCKET_CLIENT,
-} ez_socket_role_t;
+} ez_role_t;
 
+typedef enum
+{
+  EZ_SOCKET_TCP,
+  EZ_SOCKET_UDP,
+} ez_protocol_t;
+
+typedef struct
+{
+  char     ip_addr[32];
+  uint32_t port;
+
+#ifdef _WIN32
+  SOCKADDR_IN socket_addr;
+#else
+  struct sockaddr_in socket_addr;
+#endif
+} ez_ip_addr_t;
 
 typedef struct
 {
@@ -61,10 +78,15 @@ typedef struct
   int h_client;
   struct sockaddr_in client_addr;
 #endif
-  char ip_addr[32];
-  uint32_t port;
 
-  ez_socket_role_t role;
+  bool is_local_ip;  
+  bool is_remote_ip;
+
+  ez_ip_addr_t local_ip;
+  ez_ip_addr_t remote_ip;
+
+  ez_role_t role;
+  ez_protocol_t protocol;
 
 
   uint32_t packet_id;
@@ -73,7 +95,7 @@ typedef struct
 
 
 
-ez_err_t socketInit(ez_socket_t *p_socket, ez_socket_role_t socket_role);
+ez_err_t socketInit(ez_socket_t *p_socket, ez_role_t socket_role, ez_protocol_t protocol=EZ_SOCKET_TCP);
 ez_err_t socketDeInit(ez_socket_t *p_socket);
 ez_err_t socketCreate(ez_socket_t *p_socket);
 ez_err_t socketSetReceiveTimeout(ez_socket_t *p_socket, uint32_t milliseconds);
@@ -87,6 +109,9 @@ int      socketReadForLength(ez_socket_t *p_socket, uint8_t *p_data, uint32_t le
 ez_err_t socketClose(ez_socket_t *p_socket);
 ez_err_t socketDestroy(ez_socket_t *p_socket);
 bool     socketIsConnected(ez_socket_t *p_socket);
+bool     socketIsRemtoeIP(ez_socket_t *p_socket);
+ez_err_t socketGetRemoteIP(ez_socket_t *p_socket, ez_ip_addr_t *p_ip_addr);
+ez_err_t socketSetRemoteIP(ez_socket_t *p_socket, const char *ip_addr, uint32_t port);
 
 }
 

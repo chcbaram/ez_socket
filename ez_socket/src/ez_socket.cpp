@@ -22,7 +22,7 @@ static ez_err_t socketIsValid(ez_socket_t *p_socket);
 
 
 
-ez_err_t socketInit(ez_socket_t *p_socket, ez_socket_role_t socket_role)
+ez_err_t socketInit(ez_socket_t *p_socket, ez_role_t socket_role, ez_protocol_t protocol)
 {
   int ret;
 
@@ -51,6 +51,9 @@ ez_err_t socketInit(ez_socket_t *p_socket, ez_socket_role_t socket_role)
   p_socket->h_client = -1;
   p_socket->role = socket_role;
   p_socket->packet_id = 0;
+  p_socket->protocol = protocol;
+  p_socket->is_local_ip = false;
+  p_socket->is_remote_ip = false;
 
   return EZ_OK;
 }
@@ -89,6 +92,9 @@ ez_err_t socketDeInit(ez_socket_t *p_socket)
 
 ez_err_t socketCreate(ez_socket_t *p_socket)
 {
+  int socket_type;
+  int socket_protocol;
+
 
   logDebug("socketCreate() \n");
 
@@ -99,13 +105,31 @@ ez_err_t socketCreate(ez_socket_t *p_socket)
   }
 
 #ifdef _WIN32  
-  const int protocol = IPPROTO_TCP;
+  if (p_socket->protocol == EZ_SOCKET_TCP)
+  {
+    socket_type = SOCK_STREAM;
+    socket_protocol = IPPROTO_TCP;    
+  }
+  else
+  {
+    socket_type = SOCK_DGRAM;
+    socket_protocol = IPPROTO_UDP;    
+  }  
 #else
-  const int protocol = 0;
+  if (p_socket->protocol == EZ_SOCKET_TCP)
+  {
+    socket_type = SOCK_STREAM;
+    socket_protocol = 0;    
+  }
+  else
+  {
+    socket_type = SOCK_DGRAM;
+    socket_protocol = 0;    
+  }
 #endif
 
   // Create Server Socket
-  p_socket->h_socket = socket(PF_INET, SOCK_STREAM, protocol);
+  p_socket->h_socket = socket(PF_INET, socket_type, socket_protocol);
   if (p_socket->h_socket <= 0)
   {
     EZ_LOG_TRACE_ERROR(p_socket->h_socket);
@@ -240,7 +264,7 @@ ez_err_t socketBind(ez_socket_t *p_socket, const char *ip_addr, uint32_t port)
     p_socket->socket_addr.sin_port = htons(port);
 #endif
 
-  p_socket->port = port;
+  p_socket->local_ip.port = port;
 
   // Assign an address to the server socket
   ret = bind(p_socket->h_socket, (SOCKADDR*)&p_socket->socket_addr, sizeof(p_socket->socket_addr));
@@ -310,6 +334,10 @@ ez_err_t socketAccept(ez_socket_t *p_socket)
     return (p_socket->err_code = EZ_ERR_SOCKET_ACCEPT);
   }
 
+  p_socket->remote_ip.port = ntohs(p_socket->client_addr.sin_port);
+  strcpy_s(p_socket->remote_ip.ip_addr, inet_ntoa(p_socket->client_addr.sin_addr));
+  p_socket->is_remote_ip = true;
+
   p_socket->is_connected = true;
 
   return EZ_OK;
@@ -344,9 +372,7 @@ ez_err_t socketConnect(ez_socket_t *p_socket, const char *ip_addr, uint32_t port
   p_socket->socket_addr.sin_family = AF_INET;
   p_socket->socket_addr.sin_addr.s_addr=inet_addr(ip_addr);
   p_socket->socket_addr.sin_port = htons(port);
-#endif
-
-  p_socket->port = port;
+#endif  
 
   // Assign an address to the target server socket
   ret = connect(p_socket->h_socket, (SOCKADDR*)&p_socket->socket_addr, sizeof(p_socket->socket_addr));
@@ -355,6 +381,10 @@ ez_err_t socketConnect(ez_socket_t *p_socket, const char *ip_addr, uint32_t port
     p_socket->is_connected = false;
     return (p_socket->err_code = EZ_ERR_SOCKET_CONNECT);
   }
+
+  p_socket->remote_ip.port = ntohs(p_socket->socket_addr.sin_port);
+  strcpy_s(p_socket->remote_ip.ip_addr, inet_ntoa(p_socket->socket_addr.sin_addr));
+  p_socket->is_remote_ip = true;
 
   p_socket->is_connected = true;
 
@@ -380,7 +410,7 @@ int socketWrite(ez_socket_t *p_socket, const uint8_t *p_data, uint32_t length)
     return EZ_FATAL;
   }
 
-  if (p_socket->role == EZ_SOCKET_SERVER)
+  if (p_socket->role == EZ_SOCKET_SERVER && p_socket->protocol == EZ_SOCKET_TCP)
   {
     h_socket = p_socket->h_client;
   }
@@ -391,7 +421,22 @@ int socketWrite(ez_socket_t *p_socket, const uint8_t *p_data, uint32_t length)
 
   // Send messages to assigned clients.
 #ifdef _WIN32  
-  ret = send(h_socket, (const char *)p_data, length, 0);
+  if (p_socket->protocol == EZ_SOCKET_TCP || p_socket->is_connected == true)
+  {
+    ret = send(h_socket, (const char *)p_data, length, 0);
+  }
+  else
+  {
+    if (p_socket->is_remote_ip == true)
+    {
+      ret = sendto(h_socket, (const char *)p_data, length, 0, 
+                  (SOCKADDR*)&p_socket->remote_ip.socket_addr, sizeof(p_socket->remote_ip.socket_addr));
+    }
+    else
+    {
+      ret = -1;
+    }
+  }
 #else
   //ret = write(h_socket, (const char *)p_data, length);
   ret = send(h_socket, (const char *)p_data, length, MSG_NOSIGNAL);
@@ -418,7 +463,7 @@ int socketRead(ez_socket_t *p_socket, uint8_t *p_data, uint32_t length)
     return EZ_FATAL;
   }
 
-  if (p_socket->role == EZ_SOCKET_SERVER)
+  if (p_socket->role == EZ_SOCKET_SERVER && p_socket->protocol == EZ_SOCKET_TCP)
   {
     h_socket = p_socket->h_client;
   }
@@ -428,8 +473,25 @@ int socketRead(ez_socket_t *p_socket, uint8_t *p_data, uint32_t length)
   }
 
   // Send messages to assigned clients.
-#ifdef _WIN32  
-  ret = recv(h_socket, (char *)p_data, length, 0);
+#ifdef _WIN32
+  if (p_socket->protocol == EZ_SOCKET_TCP || p_socket->is_connected == true)
+  {  
+    ret = recv(h_socket, (char *)p_data, length, 0);
+  }
+  else
+  {
+    SOCKADDR_IN ip_addr;
+    int ip_addr_size;
+
+    ip_addr_size = sizeof(ip_addr);
+    ret = recvfrom(h_socket, (char *)p_data, length, 0, (SOCKADDR*)&ip_addr, &ip_addr_size);
+
+    p_socket->remote_ip.port = ntohs(ip_addr.sin_port);
+    strcpy_s(p_socket->remote_ip.ip_addr, inet_ntoa(ip_addr.sin_addr));
+    p_socket->remote_ip.socket_addr = ip_addr;
+
+    p_socket->is_remote_ip = true;
+  }
 #else
   ret = read(h_socket, (char *)p_data, length);
 #endif  
@@ -528,6 +590,45 @@ int socketReadForLength(ez_socket_t *p_socket, uint8_t *p_data, uint32_t length)
   return ret;
 }
 
+bool socketIsRemtoeIP(ez_socket_t *p_socket)
+{
+  return p_socket->is_remote_ip;
+}
 
+ez_err_t socketGetRemoteIP(ez_socket_t *p_socket, ez_ip_addr_t *p_ip_addr)
+{
+  ez_err_t err_ret = EZ_ERR;
+
+
+  if (p_socket->is_remote_ip == true)
+  {
+    *p_ip_addr = p_socket->remote_ip;
+    err_ret = EZ_OK;
+  }
+
+  return err_ret;
+}
+
+ez_err_t socketSetRemoteIP(ez_socket_t *p_socket, const char *ip_addr, uint32_t port)
+{
+
+#ifdef _WIN32  
+  memset(&p_socket->remote_ip.socket_addr, 0, sizeof(p_socket->remote_ip.socket_addr));
+  p_socket->remote_ip.socket_addr.sin_family = AF_INET;
+  p_socket->remote_ip.socket_addr.sin_addr.S_un.S_addr = inet_addr(ip_addr);  
+  p_socket->remote_ip.socket_addr.sin_port = htons(port);
+#else
+  memset(&p_socket->remote_ip.socket_addr, 0, sizeof(p_socket->remote_ip.socket_addr));
+  p_socket->remote_ip.socket_addr.sin_family = AF_INET;
+  p_socket->remote_ip.socket_addr.sin_addr.s_addr=inet_addr(ip_addr);
+  p_socket->remote_ip.socket_addr.sin_port = htons(port);
+#endif
+
+  strcpy_s(p_socket->remote_ip.ip_addr, ip_addr);
+  p_socket->remote_ip.port = port;
+  p_socket->is_remote_ip = true;
+
+  return EZ_OK;
+}
 
 }
