@@ -116,9 +116,19 @@ int beginServer(void)
       }  
     });
     
+    uint32_t can_cnt = 0;
     while(1)
     {
-      cmdCanSendType(&cmd_can, PKT_TYPE_CAN, NULL, 0);      
+      can_msg_t can_msg;
+
+      can_msg.id  = 0x123;
+      can_msg.id_type = CAN_EXT;
+      can_msg.dlc = CAN_DLC_4;
+      can_msg.length = 4;
+      memcpy(can_msg.data, &can_cnt, 4);
+      can_cnt++;
+
+      cmdCanSendType(&cmd_can, PKT_TYPE_CAN, (uint8_t *)&can_msg, sizeof(can_msg));      
       ez::delay(1000);
     }        
   }
@@ -175,7 +185,16 @@ int beginClient(void)
           }
           if (cmd_can.rx_packet.type == PKT_TYPE_CAN)
           {
-            log("rx can msg\n");
+            can_msg_t can_msg;
+
+            memcpy(&can_msg, cmd_can.rx_packet.data, sizeof(can_msg));
+
+            log("rx can msg id:0x%X, dlc:%d, ", can_msg.id, can_msg.length);
+            for (int i=0; i<can_msg.length; i++)
+            {
+              log("0x%02X, ", can_msg.data[i]);
+            }
+            log("\n");
           }
         }        
       }  

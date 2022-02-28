@@ -15,6 +15,7 @@ extern "C" {
 #include "hw_def.h"
 
 
+#include "can.h"
 #include "cmd_can.h"
 
 
