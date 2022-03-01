@@ -1,2 +1,3 @@
 examples/ez_socket_tcp/main.exe
 examples/ez_socket_udp/main.exe
+examples/ez_socket_can/main.exe
