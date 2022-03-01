@@ -50,6 +50,13 @@ typedef enum
 
 typedef enum
 {
+  CAN_FRAME_TYPE_DATA,
+  CAN_FRAME_TYPE_ERROR,
+  CAN_FRAME_TYPE_REMOTE,
+} CanFrameType_t;
+
+typedef enum
+{
   CAN_STD,
   CAN_EXT
 } CanIdType_t;
@@ -105,12 +112,13 @@ typedef struct
 typedef struct
 {
   uint32_t id;
-  uint16_t length;
-  uint8_t  data[64];
+  uint8_t  length;
 
-  CanDlc_t      dlc;
-  CanIdType_t   id_type;
-  CanFrame_t    frame;
+  uint8_t  id_type;
+  uint8_t  frame_type;
+  uint8_t  frame_option;
+
+  uint8_t  data[64];
 } can_msg_t;
 
 

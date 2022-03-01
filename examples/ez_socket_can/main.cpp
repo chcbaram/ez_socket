@@ -111,7 +111,24 @@ int beginServer(void)
               default:
                 break;
             }
-          }        
+          }
+          if (cmd_can.rx_packet.type == PKT_TYPE_PING)
+          {
+            log("Receive Type Ping\n");
+          }
+          if (cmd_can.rx_packet.type == PKT_TYPE_CAN)
+          {
+            can_msg_t can_msg;
+
+            memcpy(&can_msg, cmd_can.rx_packet.data, sizeof(can_msg));
+
+            log("rx can msg id:0x%X, ext:%d dlc:%d, ", can_msg.id, can_msg.id_type, can_msg.length);
+            for (int i=0; i<can_msg.length; i++)
+            {
+              log("0x%02X, ", can_msg.data[i]);
+            }
+            log("\n");
+          }
         }        
       }  
     });
@@ -123,7 +140,8 @@ int beginServer(void)
 
       can_msg.id  = 0x123;
       can_msg.id_type = CAN_EXT;
-      can_msg.dlc = CAN_DLC_4;
+      can_msg.frame_type = CAN_FRAME_TYPE_DATA;
+      can_msg.frame_option = CAN_CLASSIC;
       can_msg.length = 4;
       memcpy(can_msg.data, &can_cnt, 4);
       can_cnt++;
