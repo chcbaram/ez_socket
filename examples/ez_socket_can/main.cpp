@@ -140,8 +140,8 @@ int beginServer(void)
 
       can_msg.id  = 0x123;
       can_msg.id_type = CAN_EXT;
-      can_msg.frame_type = CAN_FRAME_TYPE_DATA;
-      can_msg.frame_option = CAN_CLASSIC;
+      can_msg.frame = CAN_CLASSIC;
+      can_msg.frame_type = CAN_FRAME_TYPE_DATA;      
       can_msg.length = 4;
       memcpy(can_msg.data, &can_cnt, 4);
       can_cnt++;
